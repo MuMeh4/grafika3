@@ -1,0 +1,6 @@
+# ninja log v5
+0	330	1710890253409647244	CMakeFiles/GrafikaHaziCsomag.dir/Programs/Skeleton/Skeleton/framework.cpp.o	212e941bfccb41b5
+1	428	1710890253506313457	CMakeFiles/GrafikaHaziCsomag.dir/Programs/Skeleton/Skeleton/Skeleton.cpp.o	9fda5b779a27bf76
+428	496	1710890253572979812	GrafikaHaziCsomag	e113a698f250b168
+1	587	1710890373495752149	CMakeFiles/GrafikaHaziCsomag.dir/Programs/Skeleton/Skeleton/Skeleton.cpp.o	9fda5b779a27bf76
+588	732	1710890373639084812	GrafikaHaziCsomag	e113a698f250b168
