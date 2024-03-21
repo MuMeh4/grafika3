@@ -72,7 +72,7 @@ const char * const vertexSource = R"(
     out vec2 texcoord;
 
 	void main() {
-		gl_Position = vec4(vp.x, vp.y, vp.z, 1) * MVP;		// transform vp from modeling space to normalized device space
+		gl_Position = vec4(vp.x, vp.y, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
         texcoord = vtxUV;
 	}
 )";
@@ -89,6 +89,24 @@ const char * const fragmentSource = R"(
 		fragmentColor = texture(samplerUnit, texcoord);
 	}
 )";
+
+class Camera {
+    vec2 wCenter;
+    vec2 wSize;
+
+public:
+    Camera() : wCenter(20, 30), wSize(150, 150) {}
+    mat4 V() { return TranslateMatrix(-wCenter); }
+    mat4 P() { return ScaleMatrix(vec2(2 / wSize.x, 2 / wSize.y)); }
+
+    mat4 Vinv() { return TranslateMatrix(wCenter); }
+    mat4 Pinv() { return ScaleMatrix(vec2(wSize.x / 2, wSize.y / 2)); }
+
+    void Zoom(float s) { wSize = wSize * s; }
+    void Pan(float s) { wCenter.x = wCenter.x + s; }
+};
+
+Camera camera;
 
 GPUProgram gpuProgram; // vertex and fragment shaders
 
@@ -158,7 +176,6 @@ class Line : public Object {
 				visible = false;
 			}
 		}
-		printf("%f %f\n", d, phi);
 	}
 	void updateAndDraw() override {}
 public:
@@ -196,15 +213,19 @@ protected:
 		}
 	}
 
-	bool isEvenDeep(float x, float y) {
+	vec4 pixelColor(float x, float y) {
 		int n = 0;
 		if (x * x + y * y < 1.0f) {
 			n++;
 		}
+        else {
+            return vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        //return vec4(1.0f, 1.0f, 1.0f, 1.0f);
 		for (Line* line : lines) {
 			n += line->isInside(x, y) ? 1 : 0;
 		}
-		return n % 2 == 0;
+		return n % 2 == 0 ? vec4(0.0f, 0.0f, 1.0f, 1.0f) : vec4(1.0f, 1.0f, 0.0f, 1.0f);
 	}
 public:
 	void addLine(Line *line) {
@@ -216,10 +237,10 @@ public:
 		}
 	}
 	int RenderToTexture(int w, int h, int sampling = GL_LINEAR) {
-		vec3 * image = new vec3[w * h];
+		vec4 * image = new vec4[w * h];
 		for (int i = 0; i < w; i++) {
 			for (int j = 0; j < h; j++) {
-				image[i * h + j] = isEvenDeep((i - w / 2.0f) / w, (j - h / 2.0f) / h) ? vec3(0.0f, 0.0f, 0.0f) : vec3(0.0f, 1.0f, 1.0f);
+				image[i * h + j] = pixelColor((i / (float) w) * 2 - 1, (j / (float) h) * 2 - 1);
 			}
 		}
 		unsigned int textureId;
@@ -229,6 +250,8 @@ public:
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_FLOAT, &image[0]); // To GPU
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampling); // sampling
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampling);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // wrapping
+        delete[] image;
 		return textureId;
 	}
 };
@@ -236,6 +259,25 @@ public:
 class Star {
 	Poincare poincare;
 	unsigned int vao, vbo[2], textureId;
+    float s = 20;
+    const float r = 40;
+    vec2 pos = vec2(50, 30);
+    float phi = 0;
+    mat4 M() {
+        mat4 scale(1, 0, 0, 0,
+                   0, 1, 0, 0,
+                   0, 0, 0, 0,
+                   0, 0, 0, 1);
+        mat4 rotate(cosf(phi), -sinf(phi), 0, 0,
+                    sinf(phi), cosf(phi), 0, 0,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1);
+        mat4 translate(1, 0, 0, 0,
+                       0, 1, 0, 0,
+                       0, 0, 0, 0,
+                       pos.x, pos.y, 0, 1);
+        return scale * rotate * translate;
+    }
 public:
 	void create() {
 		poincare.create();
@@ -248,7 +290,7 @@ public:
 			poincare.addLine(line);
 			for (int j = 0; j < 5; j++) {
 				n += 1.0f;
-				Line* line = new Line(n, phi);
+				line = new Line(n, phi);
 				line->create();
 				poincare.addLine(line);
 			}
@@ -259,31 +301,38 @@ public:
         glGenBuffers(2, vbo);// Generate 2 vertex buffer objects
 // vertex coordinates: vbo[0] -> Attrib Array 0 -> vertices
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-        float vtxs[] = {-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f};
+        float vtxs[] = {0, 0, 0, s, -r, r, -s, 0, -r, -r, 0, -s, r, -r, s, 0, r, r, 0, s, -r, r, 0, s};
         glBufferData(GL_ARRAY_BUFFER, sizeof(vtxs),vtxs, GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 // vertex coordinates: vbo[1] -> Attrib Array 1 -> uvs
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-        float uvs[] = {0, 0, 1, 0, 1, 1, 0, 1};
+        float uvs[] = {0.5f, 0.5f, 0.0f, 0.5f, 0.0f, 0.0f,0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.5f, 1.0f, 1.0f, 0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 0.5f};
         glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
+        textureId = poincare.RenderToTexture(600, 600, GL_NEAREST);
 
 	}
 	void draw() {
 		int sampler = 0; // which sampler unit should be used
 		gpuProgram.setUniform(sampler, "samplerUnit");
+        mat4 MVPTransform = M() * camera.V() * camera.P();
+        gpuProgram.setUniform(MVPTransform, "MVP");
 		glActiveTexture(GL_TEXTURE0 + sampler); // = GL_TEXTURE0
 		glBindTexture(GL_TEXTURE_2D, textureId);
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 4);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 10);
 
 	}
+
+    void update(long time) {
+        phi = time / 1000;
+    }
 };
 
-Poincare poincare;
+Star poincare;
 
 
 // Initialization, create an OpenGL context
@@ -292,22 +341,10 @@ void onInitialization() {
 
     poincare.create();
 
-    for (int i = 0; i < 9; i++) {
-        float phi = i / 9.0f * 2 * M_PI;
-        float n = 0.5f;
-        Line* line = new Line(n, phi);
-        line->create();
-        poincare.addLine(line);
-        for (int j = 0; j < 5; j++) {
-            n += 1.0f;
-            Line* line = new Line(n, phi);
-            line->create();
-            poincare.addLine(line);
-        }
-    }
+
 
 	// create program for the GPU
-	gpuProgram.create(vertexSource, fragmentSource, "outColor");
+	gpuProgram.create(vertexSource, fragmentSource, "fragmentColor");
 }
 
 // Window has become invalid: Redraw
@@ -349,4 +386,8 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+
+    poincare.update(time);
+
+    glutPostRedisplay();
 }
