@@ -18,8 +18,8 @@
 //
 // NYILATKOZAT
 // ---------------------------------------------------------------------------------------------
-// Nev    : 
-// Neptun : 
+// Nev    : Zelei Matyas
+// Neptun : BJJ4UD
 // ---------------------------------------------------------------------------------------------
 // ezennel kijelentem, hogy a feladatot magam keszitettem, es ha barmilyen segitseget igenybe vettem vagy
 // mas szellemi termeket felhasznaltam, akkor a forrast es az atvett reszt kommentekben egyertelmuen jeloltem.
@@ -155,7 +155,7 @@ class Line : public Object {
 		// Calculate the radius of the circle so that it crosses the big circle perpendicularly
 		float r = (1.0f - d * d) / 2.0f / d;
 
-		int a = - 100 * (phi / M_PIf / 2);
+		int a = - 100 * (phi / M_PI / 2);
 
 		bool visible = false;
 
@@ -259,10 +259,14 @@ public:
 class Star {
 	Poincare poincare;
 	unsigned int vao, vbo[2], textureId;
-    float s = 20;
+    float s = 40;
     const float r = 40;
     vec2 pos = vec2(50, 30);
     float phi = 0;
+    float alpha = 0;
+
+    int res = 300;
+    int sampling = GL_LINEAR;
     mat4 M() {
         mat4 scale(1, 0, 0, 0,
                    0, 1, 0, 0,
@@ -312,7 +316,7 @@ public:
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
-        textureId = poincare.RenderToTexture(600, 600, GL_NEAREST);
+        textureId = poincare.RenderToTexture(res, res, sampling);
 
 	}
 	void draw() {
@@ -328,11 +332,39 @@ public:
 	}
 
     void update(long time) {
-        phi = time / 1000;
+        phi = time % 5000 / 5000.0f * 2 * M_PI;
+        alpha = time % 10000 / 10000.0f * 2 * M_PI;
+        vec2 center = vec2(20, 30);
+        pos = center + vec2(cosf(alpha) * 30, sinf(alpha) * 30);
+
+    }
+
+    void makeSharper(int ns) {
+        s -= ns;
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+        float vtxs[] = {0, 0, 0, s, -r, r, -s, 0, -r, -r, 0, -s, r, -r, s, 0, r, r, 0, s, -r, r, 0, s};
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vtxs),vtxs, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+        textureId = poincare.RenderToTexture(res, res, sampling);
+    }
+
+    void modResolution(int nres) {
+        res += nres;
+        textureId = poincare.RenderToTexture(res, res, sampling);
+    }
+
+    void setSampling(int samp) {
+        sampling = samp;
+        textureId = poincare.RenderToTexture(res, res, sampling);
     }
 };
 
 Star poincare;
+
+bool animate = false;
+long startTime;
 
 
 // Initialization, create an OpenGL context
@@ -359,6 +391,20 @@ void onDisplay() {
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
+    if (key == 'h') poincare.makeSharper(10);
+    if (key == 'H') poincare.makeSharper(-10);
+    if (key == 'r') poincare.modResolution(-100);
+    if (key == 'R') poincare.modResolution(100);
+    if (key == 't') poincare.setSampling(GL_NEAREST);
+    if (key == 'T') poincare.setSampling(GL_LINEAR);
+
+    if (key == 'a') {
+        animate = !animate;
+        if (animate) {
+            startTime = glutGet(GLUT_ELAPSED_TIME);
+        }
+    }
+
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 }
 
@@ -377,8 +423,8 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 // Mouse click event
 void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
 	// Convert to normalized device space
-	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-	float cY = 1.0f - 2.0f * pY / windowHeight;
+	//float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
+	//float cY = 1.0f - 2.0f * pY / windowHeight;
 
 	glutPostRedisplay();
 }
@@ -387,7 +433,9 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 
-    poincare.update(time);
+    if (animate){
+        poincare.update(time - startTime);
+    }
 
     glutPostRedisplay();
 }
