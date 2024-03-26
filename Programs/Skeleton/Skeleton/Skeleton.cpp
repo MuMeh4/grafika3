@@ -33,34 +33,6 @@
 //=============================================================================================
 #include "framework.h"
 
-/*// vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
-const char * const vertexSource = R"(
-	#version 330				// Shader 3.3
-	precision highp float;		// normal floats, makes no difference on desktop computers
-
-	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
-	layout(location = 0) in vec2 vtxPos;
-	layout(location = 1) in vec2 vtxUV;
-	out vec2 texcoord;
-	void main() {
-		gl_Position = vec4(vtxPos, 0, 1) * MVP;
-		texcoord = vtxUV;
-	}
-)";
-
-// fragment shader in GLSL
-const char * const fragmentSource = R"(
-	#version 330			// Shader 3.3
-	precision highp float;	// normal floats, makes no difference on desktop computers
-	
-	uniform sampler2D samplerUnit;
-	in vec2 texcoord;
-	out vec4 fragmentColor;
-	void main() {
-		fragmentColor = texture(samplerUnit, texcoord);
-	}
-)";*/
-
 const char * const vertexSource = R"(
 	#version 330				// Shader 3.3
 	precision highp float;		// normal floats, makes no difference on desktop computers
@@ -98,12 +70,6 @@ public:
     Camera() : wCenter(20, 30), wSize(150, 150) {}
     mat4 V() { return TranslateMatrix(-wCenter); }
     mat4 P() { return ScaleMatrix(vec2(2 / wSize.x, 2 / wSize.y)); }
-
-    mat4 Vinv() { return TranslateMatrix(wCenter); }
-    mat4 Pinv() { return ScaleMatrix(vec2(wSize.x / 2, wSize.y / 2)); }
-
-    void Zoom(float s) { wSize = wSize * s; }
-    void Pan(float s) { wCenter.x = wCenter.x + s; }
 };
 
 Camera camera;
@@ -115,7 +81,6 @@ protected:
 	unsigned int vao, vbo;
 	std::vector<vec2> points;
 	virtual void calculatePoints() = 0;
-	virtual void updateAndDraw() = 0;
 public:
 	void create() {
 		glGenVertexArrays(1, &vao);
@@ -128,23 +93,6 @@ public:
 
 		calculatePoints();
 	}
-
-	void draw() {
-		updateAndDraw();
-		mat4 MVPTransform ( 1, 0, 0, 0,
-							0, 1, 0, 0,
-							0, 0, 1, 0,
-							0, 0, 0, 1 );
-		gpuProgram.setUniform(MVPTransform, "MVP");
-
-		gpuProgram.setUniform(vec3(1.0f, 0.0f, 0.0f), "color");
-		glBindVertexArray(vao);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, points.size() * sizeof(float) * 2, &points[0], GL_DYNAMIC_DRAW);
-		glDrawArrays(GL_LINE_STRIP, 0, points.size());
-	}
-
-
 };
 
 class Line : public Object {
@@ -177,7 +125,6 @@ class Line : public Object {
 			}
 		}
 	}
-	void updateAndDraw() override {}
 public:
 	Line(float d, float phi) {
 		this->d = (- 2 + sqrtf(4 + 4 * sinhf(d) * sinhf(d))) / 2.0f / sinhf(d);
@@ -207,12 +154,6 @@ protected:
 		}
 	}
 
-	void updateAndDraw() override {
-		for (Line* line : lines) {
-			line->draw();
-		}
-	}
-
 	vec4 pixelColor(float x, float y) {
 		int n = 0;
 		if (x * x + y * y < 1.0f) {
@@ -221,7 +162,6 @@ protected:
         else {
             return vec4(0.0f, 0.0f, 0.0f, 1.0f);
         }
-        //return vec4(1.0f, 1.0f, 1.0f, 1.0f);
 		for (Line* line : lines) {
 			n += line->isInside(x, y) ? 1 : 0;
 		}
@@ -230,11 +170,6 @@ protected:
 public:
 	void addLine(Line *line) {
 		lines.push_back(line);
-	}
-	void drawLines() {
-		for (Line* line : lines) {
-			line->draw();
-		}
 	}
 	int RenderToTexture(int w, int h, int sampling = GL_LINEAR) {
 		vec4 * image = new vec4[w * h];
@@ -373,8 +308,6 @@ void onInitialization() {
 
     poincare.create();
 
-
-
 	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "fragmentColor");
 }
@@ -404,8 +337,6 @@ void onKeyboard(unsigned char key, int pX, int pY) {
             startTime = glutGet(GLUT_ELAPSED_TIME);
         }
     }
-
-	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 }
 
 // Key of ASCII code released
@@ -413,25 +344,16 @@ void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
 
 // Move mouse with key pressed
-void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
-	// Convert to normalized device space
-	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-	float cY = 1.0f - 2.0f * pY / windowHeight;
-	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
+void onMouseMotion(int pX, int pY) {
 }
 
 // Mouse click event
-void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
-	// Convert to normalized device space
-	//float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-	//float cY = 1.0f - 2.0f * pY / windowHeight;
-
-	glutPostRedisplay();
+void onMouse(int button, int state, int pX, int pY) {
 }
 
-// Idle event indicating that some time elapsed: do animation here
+
 void onIdle() {
-	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	long time = glutGet(GLUT_ELAPSED_TIME);
 
     if (animate){
         poincare.update(time - startTime);
